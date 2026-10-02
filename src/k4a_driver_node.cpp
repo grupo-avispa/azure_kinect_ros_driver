@@ -27,6 +27,15 @@ namespace
 /** @brief Consecutive captures that may fail to render before the node gives up. */
 constexpr int kMaxConsecutiveFrameFailures = 30;
 
+/** @brief Consecutive capture exceptions after which the cameras are restarted. */
+constexpr int kMaxConsecutiveCaptureErrors = 30;
+
+/** @brief Restarts of the cameras in a row, with no capture in between, before giving up. */
+constexpr int kMaxCameraRestarts = 3;
+
+/** @brief Pause between stopping and starting the cameras again. */
+constexpr std::chrono::milliseconds kCameraRestartDelay = 500ms;
+
 /** @brief Pause before a thread that threw is started again. */
 constexpr std::chrono::milliseconds kThreadRestartDelay = 500ms;
 
@@ -481,6 +490,8 @@ void K4ADriverNode::captureThread()
   std::chrono::milliseconds wait_time = first_frame_wait_time;
 
   int consecutive_failures = 0;
+  int consecutive_errors = 0;
+  int camera_restarts = 0;
   std::chrono::microseconds last_timestamp{ 0 };
   k4a::capture capture;
 
@@ -495,11 +506,31 @@ void K4ADriverNode::captureThread()
     {
       // A hardware-level capture failure (e.g. a corrupted USB frame breaking the sensor's
       // internal MJPEG decode) surfaces as an exception rather than as a timeout; treat it as
-      // recoverable and retry instead of letting the node crash.
+      // recoverable and retry instead of letting the node crash. The SDK may disable a queue
+      // after such a failure, so retrying never succeeds: restart the cameras, and give up only
+      // if that does not help either.
       RCLCPP_ERROR(this->get_logger(), "Failed to get capture, retrying: %s", error.what());
+      if (++consecutive_errors >= kMaxConsecutiveCaptureErrors)
+      {
+        if (++camera_restarts > kMaxCameraRestarts)
+        {
+          RCLCPP_FATAL(this->get_logger(),
+                       "The cameras did not recover after %d restarts: node cannot continue.",
+                       kMaxCameraRestarts);
+          stop_request_ = StopRequest::kFatalError;
+          return;
+        }
+        RCLCPP_WARN(this->get_logger(), "%d capture errors in a row: restarting cameras (%d/%d)",
+                    consecutive_errors, camera_restarts, kMaxCameraRestarts);
+        consecutive_errors = 0;
+        restartCameras();
+        wait_time = first_frame_wait_time;
+        continue;
+      }
       std::this_thread::sleep_for(std::chrono::milliseconds(1000 / params_.fps));
       continue;
     }
+    consecutive_errors = 0;
 
     if (status == CaptureSource::Status::kTimeout)
     {
@@ -514,6 +545,7 @@ void K4ADriverNode::captureThread()
       return;
     }
 
+    camera_restarts = 0;
     diagnostics_.captureReceived();
     const std::chrono::microseconds timestamp = captureTimestamp(capture);
     if (status == CaptureSource::Status::kRestarted)
@@ -552,6 +584,24 @@ void K4ADriverNode::captureThread()
       return;
     }
   }
+}
+
+void K4ADriverNode::restartCameras()
+{
+  // The IMU thread may fail while the device is stopped; it is restarted by `runGuarded`
+  try
+  {
+    source_->stop();
+    std::this_thread::sleep_for(kCameraRestartDelay);
+    source_->start();
+  }
+  catch (const k4a::error& error)
+  {
+    RCLCPP_ERROR(this->get_logger(), "Failed to restart the cameras: %s", error.what());
+  }
+
+  // The device timestamps start again from zero, and so does the temperature schedule
+  next_temperature_usec_ = 0;
 }
 
 void K4ADriverNode::imuThread()

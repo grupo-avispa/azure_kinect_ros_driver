@@ -374,6 +374,41 @@ TEST_F(DriverNodeTest, ExceptionInTheCaptureThreadDoesNotStopThePublishing)
 }
 
 /**
+ * @brief A source that keeps failing is recovered by restarting the cameras.
+ */
+TEST_F(DriverNodeTest, PersistentCaptureErrorsRestartTheCameras)
+{
+  state_->throws = 35;
+  makeNode();
+  std::atomic_int received{ 0 };
+  auto subscription = probe_->create_subscription<sensor_msgs::msg::Image>(
+    "depth/image_raw", 10, [&](sensor_msgs::msg::Image::ConstSharedPtr) { ++received; });
+  ASSERT_EQ(node_->configure().id(), State::PRIMARY_STATE_INACTIVE);
+  ASSERT_EQ(node_->activate().id(), State::PRIMARY_STATE_ACTIVE);
+  startSpinning();
+
+  EXPECT_TRUE(waitFor([&]() { return received >= 5; }, 15s));
+  EXPECT_EQ(stateId(), State::PRIMARY_STATE_ACTIVE);
+  EXPECT_FALSE(node_->failed());
+  EXPECT_GE(state_->starts, 2);
+}
+
+/**
+ * @brief A source that never recovers is a fatal error.
+ */
+TEST_F(DriverNodeTest, CamerasThatDoNotRecoverAreFatal)
+{
+  state_->throws = 1000000;
+  makeNode();
+  ASSERT_EQ(node_->configure().id(), State::PRIMARY_STATE_INACTIVE);
+  ASSERT_EQ(node_->activate().id(), State::PRIMARY_STATE_ACTIVE);
+  startSpinning();
+
+  EXPECT_TRUE(waitFor([&]() { return stateId() == State::PRIMARY_STATE_UNCONFIGURED; }, 30s));
+  EXPECT_TRUE(node_->failed());
+}
+
+/**
  * @brief A cleaned up node can be configured again with other parameters.
  */
 TEST_F(DriverNodeTest, CanBeReconfiguredWithOtherParameters)

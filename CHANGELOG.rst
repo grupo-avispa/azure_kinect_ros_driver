@@ -50,6 +50,10 @@ Added
 Changed
 ^^^^^^^
 
+* The capture thread restarts the cameras (``stop()`` and ``start()`` of the source) after 30 capture
+  exceptions in a row, instead of retrying forever: after ``DecodeMJPEGtoBGRA32() failed`` the SDK
+  disables the color queue and no retry can succeed. After 3 restarts with no capture in between the
+  node stops with a fatal error.
 * ``K4AROSDevice`` and the empty ``k4a_bridge`` node were replaced by ``K4ADriverNode``; the process has a
   single node. ``K4AROSDeviceParams`` and ``K4ACalibrationTransformData`` no longer inherit from
   ``rclcpp::Node`` and the members of ``K4AROSDeviceParams`` have their default values.

@@ -131,7 +131,7 @@ public:
     if (state_->throws > 0)
     {
       --state_->throws;
-      throw std::runtime_error("fake capture failure");
+      throw k4a::error("fake capture failure");
     }
 
     const int given = state_->captures;

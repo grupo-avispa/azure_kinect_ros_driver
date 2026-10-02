@@ -193,6 +193,13 @@ private:
   /** @brief Reads the captures from the source and publishes their streams. */
   void captureThread();
 
+  /**
+   * @brief Stops and starts the cameras again, to recover from a failure the SDK cannot retry.
+   *
+   * Called from the capture thread.
+   */
+  void restartCameras();
+
   /** @brief Reads the IMU samples from the source and publishes them. */
   void imuThread();
 
@@ -323,7 +330,7 @@ private:
   diagnostic_updater::Updater updater_;
 
   /** @brief Device time of the next temperature message, in microseconds. */
-  uint64_t next_temperature_usec_ = 0;
+  std::atomic<uint64_t> next_temperature_usec_{ 0 };
 
   /** @brief Unit of the depth images. */
   conversions::DepthUnit depth_unit_ = conversions::DepthUnit::kMillimeters;
