@@ -14,10 +14,10 @@
 #include <k4a/k4a.hpp>
 #include "rclcpp/rclcpp.hpp"
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
-#include <tf2_ros/static_transform_broadcaster.h>
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2/LinearMath/Matrix3x3.h>
-#include <tf2/LinearMath/Vector3.h>
+#include <tf2_ros/static_transform_broadcaster.hpp>
+#include <tf2/LinearMath/Quaternion.hpp>
+#include <tf2/LinearMath/Matrix3x3.hpp>
+#include <tf2/LinearMath/Vector3.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 
 // Project headers

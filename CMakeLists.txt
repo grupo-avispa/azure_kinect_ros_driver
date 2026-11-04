@@ -9,17 +9,18 @@ list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_LIST_DIR}/cmake)
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 endif()
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 if(MSVC)
   add_compile_options(/wd4251)
+
   # WORKAROUND: warning C4251: 'cv_bridge::CvImage::tracked_object_': class 'std::shared_ptr<const void>' needs to have dll-interface to be used by clients of class 'cv_bridge::CvImage'
 endif()
 
-## Find packages
-
+# # Find packages
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
@@ -36,10 +37,9 @@ find_package(tf2_geometry_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(angles REQUIRED)
 
-############################
-#### AZURE KINECT SDK ######
-############################
-
+# ###########################
+# ### AZURE KINECT SDK ######
+# ###########################
 message("Finding K4A SDK binaries")
 
 # Disable cached locations for K4A SDK binaries.
@@ -57,7 +57,8 @@ set(K4A_LIBS k4a::k4a;k4a::k4arecord)
 
 # Try to find and enable the body tracking SDK
 find_package(k4abt 1.0.0 QUIET MODULE)
-if (k4abt_FOUND)
+
+if(k4abt_FOUND)
   list(APPEND K4A_LIBS k4abt::k4abt)
   message(STATUS "Body Tracking SDK found: compiling support for Body Tracking")
   set(K4A_BODY_TRACKING_ENABLED TRUE)
@@ -69,16 +70,16 @@ endif()
 # the various shared objects / DLLs
 include(Installk4a)
 
-##################################
-###### END AZURE KINECT SDK ######
-##################################
+# #################################
+# ##### END AZURE KINECT SDK ######
+# #################################
 
-###########
-## Build ##
-###########
+# ##########
+# # Build ##
+# ##########
 
-## Everything that does not need a running node lives in this library, so that it can be
-## linked by both the node and the tests.
+# # Everything that does not need a running node lives in this library, so that it can be
+# # linked by both the node and the tests.
 add_library(${PROJECT_NAME}_core STATIC
   src/k4a_conversions.cpp
   src/clock_synchronizer.cpp
@@ -87,65 +88,73 @@ add_library(${PROJECT_NAME}_core STATIC
   src/playback_source.cpp
   src/k4a_ros_device_params.cpp
   src/driver_diagnostics.cpp
-  )
+)
 set_target_properties(${PROJECT_NAME}_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(${PROJECT_NAME}_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
-ament_target_dependencies(${PROJECT_NAME}_core PUBLIC rclcpp sensor_msgs diagnostic_msgs diagnostic_updater)
-target_link_libraries(${PROJECT_NAME}_core PUBLIC ${K4A_LIBS})
+target_link_libraries(${PROJECT_NAME}_core
+  PUBLIC
+  rclcpp::rclcpp
+  ${sensor_msgs_TARGETS}
+  diagnostic_updater::diagnostic_updater
+  ${K4A_LIBS}
+  PRIVATE
+  ${diagnostic_msgs_TARGETS})
+
 if(K4A_BODY_TRACKING_ENABLED)
   target_compile_definitions(${PROJECT_NAME}_core PUBLIC K4A_BODY_TRACKING)
 endif()
 
-## The driver node, a managed node that can be composed in a container
+# # The driver node, a managed node that can be composed in a container
 add_library(${PROJECT_NAME}_component SHARED
   src/k4a_driver_node.cpp
   src/k4a_driver_streams.cpp
   src/k4a_driver_body_tracking.cpp
   src/k4a_calibration_transform_data.cpp
-  )
-target_link_libraries(${PROJECT_NAME}_component PUBLIC ${PROJECT_NAME}_core)
-ament_target_dependencies(${PROJECT_NAME}_component PUBLIC
-  rclcpp
-  rclcpp_components
-  rclcpp_lifecycle
-  lifecycle_msgs
-  std_msgs
-  sensor_msgs
-  visualization_msgs
-  tf2
-  tf2_ros
-  tf2_geometry_msgs
-  geometry_msgs
-  angles)
+)
+target_link_libraries(${PROJECT_NAME}_component
+  PUBLIC
+  ${PROJECT_NAME}_core
+  rclcpp::rclcpp
+  rclcpp_lifecycle::rclcpp_lifecycle
+  ${sensor_msgs_TARGETS}
+  ${visualization_msgs_TARGETS}
+  tf2::tf2
+  tf2_ros::tf2_ros
+  PRIVATE
+  rclcpp_components::component
+  ${lifecycle_msgs_TARGETS}
+  ${std_msgs_TARGETS}
+  ${geometry_msgs_TARGETS}
+  tf2_geometry_msgs::tf2_geometry_msgs
+  angles::angles)
 rclcpp_components_register_nodes(${PROJECT_NAME}_component "azure_kinect_ros_driver::K4ADriverNode")
 
-## The driver as a standalone process
+# # The driver as a standalone process
 add_executable(${PROJECT_NAME}_node src/k4a_driver_main.cpp)
 target_link_libraries(${PROJECT_NAME}_node ${PROJECT_NAME}_component)
 
-## Rename C++ executable without prefix
-## The above recommended prefix causes long target names, the following renames the
-## target back to the shorter version for ease of user use
-## e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
+# # Rename C++ executable without prefix
+# # The above recommended prefix causes long target names, the following renames the
+# # target back to the shorter version for ease of user use
+# # e.g. "rosrun someones_pkg node" instead of "rosrun someones_pkg someones_pkg_node"
 set_target_properties(${PROJECT_NAME}_node PROPERTIES OUTPUT_NAME node PREFIX "")
 
-#############
-## Install ##
-#############
-
+# ############
+# # Install ##
+# ############
 install(TARGETS ${PROJECT_NAME}_component
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 
-## Mark executables and/or libraries for installation
+# # Mark executables and/or libraries for installation
 install(TARGETS ${PROJECT_NAME}_node
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
-## Mark other files for installation (e.g. launch and bag files, etc.)
+# # Mark other files for installation (e.g. launch and bag files, etc.)
 install(
   DIRECTORY
   launch
@@ -153,10 +162,9 @@ install(
   DESTINATION share/${PROJECT_NAME}/
 )
 
-###########
-## Tests ##
-###########
-
+# ##########
+# # Tests ##
+# ##########
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
 
